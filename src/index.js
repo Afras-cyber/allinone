@@ -2,7 +2,8 @@ const express = require('express');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cors = require('cors');
-
+// Import Firebase services
+const { db, auth } = require('../firebase');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -39,6 +40,37 @@ app.get('/api/protected', (req, res) => {
   }
   // TODO: Verify the token
   res.status(200).json({ message: 'Access granted to protected resource' });
+});
+
+
+// Signup endpoint
+app.post('/api/signup', async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const user = await auth.createUser({ email, password });
+    res.status(201).json({ message: 'User created successfully', user });
+  } catch (error) {
+    res.status(400).json({ message: 'Signup failed', error: error.message });
+  }
+});
+
+// Download endpoint
+app.get('/api/download/:id', async (req, res) => {
+  const fileId = req.params.id;
+  try {
+    const file = await db.collection('files').doc(fileId).get();
+    if (!file.exists) {
+      return res.status(404).json({ message: 'File not found' });
+    }
+    const fileData = file.data();
+    res.download(fileData.path, fileData.name, (err) => {
+      if (err) {
+        res.status(500).json({ message: 'Download failed', error: err.message });
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
 });
 
 // Error handling middleware
