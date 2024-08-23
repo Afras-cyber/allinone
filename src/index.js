@@ -2,6 +2,8 @@ const express = require('express');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cors = require('cors');
+require('dotenv').config();
+
 // Import Firebase services
 const { db, auth } = require('../firebase');
 
@@ -44,6 +46,8 @@ app.get('/api/protected', (req, res) => {
 
 
 // Signup endpoint
+require('dotenv').config();
+
 app.post('/api/signup', async (req, res) => {
   const { email, password } = req.body;
   try {
