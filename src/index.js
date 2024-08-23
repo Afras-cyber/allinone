@@ -2,6 +2,7 @@ const express = require('express');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cors = require('cors');
+
 require('dotenv').config();
 
 // Import Firebase services
@@ -46,7 +47,7 @@ app.get('/api/protected', (req, res) => {
 
 
 // Signup endpoint
-require('dotenv').config();
+
 
 app.post('/api/signup', async (req, res) => {
   const { email, password } = req.body;
@@ -74,6 +75,40 @@ app.get('/api/download/:id', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+// Download endpoint for various social media platforms
+app.post('/api/download', async (req, res) => {
+  const { url, source } = req.body;
+
+  try {
+    let videoUrl;
+
+    switch (source.toLowerCase()) {
+      case "instagram":
+        const igResult = await instagramGetUrl(url);
+        videoUrl = igResult.url_list[0];
+        break;
+      case "tiktok":
+        const ttResult = await TikTokScraper(url);
+        videoUrl = ttResult.video;
+        break;
+      case "facebook":
+        const fbResult = await getFbVideoInfo(url);
+        videoUrl = fbResult.sd;
+        break;
+      default:
+        return res.status(400).json({ error: "Unsupported source" });
+    }
+
+    if (!videoUrl) {
+      throw new Error("No video URL found");
+    }
+
+    res.status(200).json({ videoUrl });
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({ error: "Failed to download video", details: error.message });
   }
 });
 
