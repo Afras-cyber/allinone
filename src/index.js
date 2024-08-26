@@ -6,6 +6,7 @@ const jwt = require('jsonwebtoken');
 const getFbVideoInfo = require("fb-downloader-scrapper");
 const instagramGetUrl = require("instagram-url-direct");
 const TikTokScraper = require("tiktok-scraper-without-watermark");
+
 require('dotenv').config();
 
 // Import Firebase services
@@ -27,8 +28,8 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // JWT secret keys
-const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET || 'dmt';
-const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET || 'dmt-new';
+const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET || 'your_access_token_secret';
+const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET || 'your_refresh_token_secret';
 
 // Middleware to verify JWT token
 const verifyToken = (req, res, next) => {
@@ -50,7 +51,7 @@ app.get('/api/health', (req, res) => {
 });
 
 app.post('/api/signup', async (req, res) => {
-  const { email, password, name, phone_number } = req.body;
+  const { email, password, name, mobile } = req.body;
 
   // Input validation
   if (!email || !password || !name) {
@@ -81,9 +82,9 @@ app.post('/api/signup', async (req, res) => {
       customClaims: { referenceId }
     };
 
-    // Add phone_number to update object if provided, without validation
-    if (phone_number) {
-      updateObject.phoneNumber = phone_number;
+    // Add mobile to update object if provided, without validation
+    if (mobile) {
+      updateObject.mobile = mobile;
     }
 
     // Update user profile
@@ -98,9 +99,9 @@ app.post('/api/signup', async (req, res) => {
       referenceId
     };
 
-    // Add phone_number to userData if provided
-    if (phone_number) {
-      userData.phoneNumber = phone_number;
+    // Add mobile to userData if provided
+    if (mobile) {
+      userData.phoneNumber = mobile;
     }
 
     // Generate JWT tokens
@@ -174,18 +175,6 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/protected', verifyToken, (req, res) => {
   res.status(200).json({ message: 'Access granted to protected resource', user: req.user });
 });
-
-// Refresh token endpoint
-app.post('/api/token', (req, res) => {
-  const refreshToken = req.body.token;
-  if (!refreshToken) return res.status(401).json({ message: 'Refresh token is required' });
-
-  jwt.verify(refreshToken, REFRESH_TOKEN_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ message: 'Invalid refresh token' });
-    const accessToken = generateAccessToken({ uid: user.uid });
-    res.json({ accessToken });
-  });
-});
 app.post('/api/download', verifyToken, async (req, res) => {
   const { url, source } = req.body;
   const userId = req.user.uid;
@@ -254,6 +243,49 @@ app.post('/api/download', verifyToken, async (req, res) => {
     res.status(500).json({ error: errorMessage, details: error.message });
   }
 });
+// Download history endpoint
+app.get('/api/download-history', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.uid;
+
+    // Fetch download history from Firestore
+    const historySnapshot = await db.collection('downloadHistory')
+      .where('userId', '==', userId)
+      .orderBy('timestamp', 'desc')
+      .get();
+
+    const downloadHistory = historySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      timestamp: doc.data().timestamp.toDate()
+    }));
+
+    res.status(200).json({ downloadHistory });
+  } catch (error) {
+    console.error("Error fetching download history:", error);
+    if (error.code === 'failed-precondition') {
+      res.status(500).json({ 
+        error: "Failed to fetch download history", 
+        details: "Missing index. Please create the required index in Firebase console.",
+        indexUrl: error.message.match(/https:\/\/console\.firebase\.google\.com[^\s]+/)[0]
+      });
+    } else {
+      res.status(500).json({ error: "Failed to fetch download history", details: error.message });
+    }
+  }
+});
+// Refresh token endpoint
+app.post('/api/token', (req, res) => {
+  const refreshToken = req.body.token;
+  if (!refreshToken) return res.status(401).json({ message: 'Refresh token is required' });
+
+  jwt.verify(refreshToken, REFRESH_TOKEN_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ message: 'Invalid refresh token' });
+    const accessToken = generateAccessToken({ uid: user.uid });
+    res.json({ accessToken });
+  });
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
