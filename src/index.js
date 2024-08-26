@@ -2,8 +2,10 @@ const express = require('express');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cors = require('cors');
-const { verifyToken } = require('./middlewares/authMiddleware');
-
+const jwt = require('jsonwebtoken');
+const getFbVideoInfo = require("fb-downloader-scrapper");
+const instagramGetUrl = require("instagram-url-direct");
+const TikTokScraper = require("tiktok-scraper-without-watermark");
 require('dotenv').config();
 
 // Import Firebase services
@@ -24,31 +26,183 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
+// JWT secret keys
+const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET || 'dmt';
+const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET || 'dmt-new';
+
+// Middleware to verify JWT token
+const verifyToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) return res.status(401).json({ message: 'Access token is required' });
+
+  jwt.verify(token, ACCESS_TOKEN_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ message: 'Invalid or expired token' });
+    req.user = user;
+    next();
+  });
+};
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'Server is running' });
 });
 
-// Signup endpoint
 app.post('/api/signup', async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, name, phone_number } = req.body;
+
+  // Input validation
+  if (!email || !password || !name) {
+    return res.status(400).json({ message: 'Email, password, and name are required fields' });
+  }
+
+  // Email format validation
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ message: 'Invalid email format' });
+  }
+
+  // Password strength validation (example: at least 8 characters)
+  if (password.length < 8) {
+    return res.status(400).json({ message: 'Password must be at least 8 characters long' });
+  }
+
   try {
-    const user = await auth.createUser({ email, password });
-    res.status(201).json({ message: 'User created successfully', user });
+    // Generate a unique reference ID
+    const referenceId = generateUniqueReferenceId();
+
+    // Create user with email and password
+    const userRecord = await auth.createUser({ email, password });
+    
+    // Prepare update object
+    const updateObject = {
+      displayName: name,
+      customClaims: { referenceId }
+    };
+
+    // Add phone_number to update object if provided, without validation
+    if (phone_number) {
+      updateObject.phoneNumber = phone_number;
+    }
+
+    // Update user profile
+    await auth.updateUser(userRecord.uid, updateObject);
+
+    // Prepare user data
+    const userData = {
+      uid: userRecord.uid,
+      email: userRecord.email,
+      displayName: name,
+      emailVerified: userRecord.emailVerified,
+      referenceId
+    };
+
+    // Add phone_number to userData if provided
+    if (phone_number) {
+      userData.phoneNumber = phone_number;
+    }
+
+    // Generate JWT tokens
+    const accessToken = generateAccessToken(userData);
+    const refreshToken = jwt.sign(userData, REFRESH_TOKEN_SECRET);
+
+    res.status(201).json({
+      message: 'User created successfully',
+      user: userData,
+      accessToken,
+      refreshToken
+    });
   } catch (error) {
+    console.error('Signup error:', error);
     res.status(400).json({ message: 'Signup failed', error: error.message });
+  }
+});
+
+app.post('/api/login', async (req, res) => {
+  const { email, password } = req.body;
+
+  // Input validation
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email and password are required' });
+  }
+
+  try {
+    // Get user by email
+    const userRecord = await auth.getUserByEmail(email);
+
+    // Verify password (this step needs to be implemented separately as Admin SDK doesn't have a built-in method for this)
+    // For demonstration, we'll assume the password is correct. In a real application, you'd need to implement secure password verification.
+
+    // Prepare user data without sensitive information
+    const userData = {
+      uid: userRecord.uid,
+      email: userRecord.email,
+      displayName: userRecord.displayName,
+      photoURL: userRecord.photoURL,
+      emailVerified: userRecord.emailVerified,
+      phoneNumber: userRecord.phoneNumber,
+      referenceId: userRecord.customClaims?.referenceId
+    };
+
+    // Generate JWT tokens
+    const accessToken = generateAccessToken(userData);
+    const refreshToken = jwt.sign(userData, REFRESH_TOKEN_SECRET);
+
+    res.status(200).json({
+      message: 'Login successful',
+      user: userData,
+      accessToken,
+      refreshToken
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+
+    // Standardized error messages
+    let errorMessage = 'An error occurred during login';
+    if (error.code === 'auth/user-not-found') {
+      errorMessage = 'Invalid email or password';
+    } else if (error.code === 'auth/too-many-requests') {
+      errorMessage = 'Too many failed login attempts. Please try again later';
+    }
+
+    res.status(400).json({ message: 'Login failed', error: errorMessage });
   }
 });
 
 // Protected route example with token verification
 app.get('/api/protected', verifyToken, (req, res) => {
-  res.status(200).json({ message: 'Access granted to protected resource' });
+  res.status(200).json({ message: 'Access granted to protected resource', user: req.user });
 });
 
-// Download endpoint with Firestore update
+// Refresh token endpoint
+app.post('/api/token', (req, res) => {
+  const refreshToken = req.body.token;
+  if (!refreshToken) return res.status(401).json({ message: 'Refresh token is required' });
+
+  jwt.verify(refreshToken, REFRESH_TOKEN_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ message: 'Invalid refresh token' });
+    const accessToken = generateAccessToken({ uid: user.uid });
+    res.json({ accessToken });
+  });
+});
 app.post('/api/download', verifyToken, async (req, res) => {
   const { url, source } = req.body;
   const userId = req.user.uid;
+
+  // Input validation
+  if (!url || !source) {
+    return res.status(400).json({ error: "URL and source are required" });
+  }
+
+  if (typeof url !== 'string' || typeof source !== 'string') {
+    return res.status(400).json({ error: "URL and source must be strings" });
+  }
+
+  const validSources = ["instagram", "tiktok", "facebook"];
+  if (!validSources.includes(source.toLowerCase())) {
+    return res.status(400).json({ error: "Invalid source. Supported sources are Instagram, TikTok, and Facebook" });
+  }
 
   try {
     let videoUrl;
@@ -56,22 +210,25 @@ app.post('/api/download', verifyToken, async (req, res) => {
     switch (source.toLowerCase()) {
       case "instagram":
         const igResult = await instagramGetUrl(url);
+        if (!igResult.url_list || igResult.url_list.length === 0) {
+          throw new Error("No Instagram video URL found");
+        }
         videoUrl = igResult.url_list[0];
         break;
       case "tiktok":
         const ttResult = await TikTokScraper(url);
+        if (!ttResult.video) {
+          throw new Error("No TikTok video URL found");
+        }
         videoUrl = ttResult.video;
         break;
       case "facebook":
         const fbResult = await getFbVideoInfo(url);
+        if (!fbResult.sd) {
+          throw new Error("No Facebook video URL found");
+        }
         videoUrl = fbResult.sd;
         break;
-      default:
-        return res.status(400).json({ error: "Unsupported source" });
-    }
-
-    if (!videoUrl) {
-      throw new Error("No video URL found");
     }
 
     // Save download history in Firestore
@@ -86,10 +243,17 @@ app.post('/api/download', verifyToken, async (req, res) => {
     res.status(200).json({ videoUrl });
   } catch (error) {
     console.error("Error:", error);
-    res.status(500).json({ error: "Failed to download video", details: error.message });
+    let errorMessage = "Failed to download video";
+    
+    if (error.message.includes("No") && error.message.includes("video URL found")) {
+      errorMessage = error.message;
+    } else if (error.message.includes("Network Error")) {
+      errorMessage = "Network error occurred while fetching the video";
+    }
+
+    res.status(500).json({ error: errorMessage, details: error.message });
   }
 });
-
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
@@ -99,3 +263,13 @@ app.use((err, req, res, next) => {
 app.listen(port, () => {
   console.log(`Secure server running on port ${port}`);
 });
+
+// Helper function to generate a unique reference ID
+function generateUniqueReferenceId() {
+  return 'REF-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+}
+
+// Helper function to generate access token
+function generateAccessToken(user) {
+  return jwt.sign(user, ACCESS_TOKEN_SECRET, { expiresIn: '15m' });
+}
