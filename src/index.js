@@ -211,13 +211,20 @@ app.post('/api/download', verifyToken, async (req, res) => {
         }
         videoUrl = ttResult.video;
         break;
-      case "facebook":
-        const fbResult = await getFbVideoInfo(url);
-        if (!fbResult.sd) {
-          throw new Error("No Facebook video URL found");
-        }
-        videoUrl = fbResult.sd;
-        break;
+        case "facebook":
+          const fbResult = await getFbVideoInfo(url);
+          if (fbResult.sd) {
+            videoUrl = fbResult.sd;
+          } else if (fbResult.hd) {
+            videoUrl = fbResult.hd;
+          } else if (url.includes('/reel/')) {
+            // Handle Facebook Reels
+            const reelId = url.split('/reel/')[1].split('/')[0];
+            videoUrl = `https://www.facebook.com/reel/${reelId}`;
+          } else {
+            throw new Error("No Facebook video URL found");
+          }
+          break;
     }
 
     // Save download history in Firestore
