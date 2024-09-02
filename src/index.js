@@ -5,7 +5,10 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const getFbVideoInfo = require("fb-downloader-scrapper");
 const instagramGetUrl = require("instagram-url-direct");
-const TikTokScraper = require("tiktok-scraper-without-watermark");
+// const TikTokScraper = require("tiktok-scraper-without-watermark");
+// const { getVideoMeta } = require('tiktok-scraper-ts');
+const axios = require('axios');
+
 
 require('dotenv').config();
 
@@ -75,7 +78,7 @@ app.post('/api/signup', async (req, res) => {
 
     // Create user with email and password
     const userRecord = await auth.createUser({ email, password });
-    
+
     // Prepare update object
     const updateObject = {
       displayName: name,
@@ -204,27 +207,38 @@ app.post('/api/download', verifyToken, async (req, res) => {
         }
         videoUrl = igResult.url_list[0];
         break;
-      case "tiktok":
-        const ttResult = await TikTokScraper(url);
-        if (!ttResult.video) {
-          throw new Error("No TikTok video URL found");
-        }
-        videoUrl = ttResult.video;
-        break;
-        case "facebook":
-          const fbResult = await getFbVideoInfo(url);
-          if (fbResult.sd) {
-            videoUrl = fbResult.sd;
-          } else if (fbResult.hd) {
-            videoUrl = fbResult.hd;
-          } else if (url.includes('/reel/')) {
-            // Handle Facebook Reels
-            const reelId = url.split('/reel/')[1].split('/')[0];
-            videoUrl = `https://www.facebook.com/reel/${reelId}`;
-          } else {
-            throw new Error("No Facebook video URL found");
+        case "tiktok":
+          try {
+            // First, get the oEmbed data
+            const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`;
+            const oembedResponse = await axios.get(oembedUrl);
+            const oembedData = oembedResponse.data;
+        
+            // Extract the video ID from the oEmbed data
+            const videoId = oembedData.html.match(/data-video-id="([^"]+)"/)[1];
+        
+            // Construct an embed URL
+            videoUrl = `https://www.tiktok.com/embed/${videoId}`;
+        
+          } catch (error) {
+            console.error("TikTok scraping error:", error);
+            throw new Error("Failed to fetch TikTok video information");
           }
           break;
+      case "facebook":
+        const fbResult = await getFbVideoInfo(url);
+        if (fbResult.sd) {
+          videoUrl = fbResult.sd;
+        } else if (fbResult.hd) {
+          videoUrl = fbResult.hd;
+        } else if (url.includes('/reel/')) {
+          // Handle Facebook Reels
+          const reelId = url.split('/reel/')[1].split('/')[0];
+          videoUrl = `https://www.facebook.com/reel/${reelId}`;
+        } else {
+          throw new Error("No Facebook video URL found");
+        }
+        break;
     }
 
     // Save download history in Firestore
@@ -240,7 +254,7 @@ app.post('/api/download', verifyToken, async (req, res) => {
   } catch (error) {
     console.error("Error:", error);
     let errorMessage = "Failed to download video";
-    
+
     if (error.message.includes("No") && error.message.includes("video URL found")) {
       errorMessage = error.message;
     } else if (error.message.includes("Network Error")) {
@@ -271,8 +285,8 @@ app.get('/api/download-history', verifyToken, async (req, res) => {
   } catch (error) {
     console.error("Error fetching download history:", error);
     if (error.code === 'failed-precondition') {
-      res.status(500).json({ 
-        error: "Failed to fetch download history", 
+      res.status(500).json({
+        error: "Failed to fetch download history",
         details: "Missing index. Please create the required index in Firebase console.",
         indexUrl: error.message.match(/https:\/\/console\.firebase\.google\.com[^\s]+/)[0]
       });
@@ -310,5 +324,5 @@ function generateUniqueReferenceId() {
 
 // Helper function to generate access token
 function generateAccessToken(user) {
-  return jwt.sign(user, ACCESS_TOKEN_SECRET, { expiresIn: '15m' });
+  return jwt.sign(user, ACCESS_TOKEN_SECRET, { expiresIn: '26h' });
 }
