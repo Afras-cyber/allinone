@@ -5,8 +5,8 @@ import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import getFbVideoInfo from "fb-downloader-scrapper";
 import instagramGetUrl from "instagram-url-direct";
-// import s from 'videos-downloader';
-import media from "nayan-media-downloader";
+import s from 'videos-downloader';
+// import media from "nayan-media-downloader";
 import dotenv from 'dotenv';
 import { db, auth } from '../firebase.js';
 
@@ -192,15 +192,15 @@ app.post('/api/download', verifyToken, async (req, res) => {
 // Helper functions
 async function getVideoData(url, source) {
   switch (source) {
-    // case "twitter":
-    //   const twitterData = s.twitter(url);
-    //   if (!twitterData?.media_extended[0]?.url) {
-    //     throw new Error("No Twitter video URL found");
-    //   }
-    //   return {
-    //     videoUrl: twitterData.media_extended[0].url,
-    //     thumbnail_url: twitterData.media_extended[0].thumbnail_url,
-    //   };
+    case "twitter":
+      const twitterData = s.twitter(url);
+      if (!twitterData?.media_extended[0]?.url) {
+        throw new Error("No Twitter video URL found");
+      }
+      return {
+        videoUrl: twitterData.media_extended[0].url,
+        thumbnail_url: twitterData.media_extended[0].thumbnail_url,
+      };
     case "instagram":
       const igResult = await instagramGetUrl(url);
       if (!igResult.url_list || igResult.url_list.length === 0) {
@@ -210,15 +210,15 @@ async function getVideoData(url, source) {
         videoUrl: igResult.url_list[0],
         thumbnail_url: null
       };
-    case "tiktok":
-      const tiktokData = await media?.tikdown(url);
-      if (!tiktokData?.data?.video) {
-        throw new Error("No TikTok video URL found");
-      }
-      return {
-        videoUrl: tiktokData.data.video,
-        thumbnail_url: tiktokData.data.author?.avatar
-      };
+    // case "tiktok":
+    //   const tiktokData = await media?.tikdown(url);
+    //   if (!tiktokData?.data?.video) {
+    //     throw new Error("No TikTok video URL found");
+    //   }
+    //   return {
+    //     videoUrl: tiktokData.data.video,
+    //     thumbnail_url: tiktokData.data.author?.avatar
+    //   };
     case "facebook":
       const fbResult = await getFbVideoInfo(url);
       if (!fbResult) {
