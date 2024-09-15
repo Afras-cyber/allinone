@@ -207,7 +207,7 @@ app.post("/api/download", verifyToken, async (req, res) => {
       .json({ error: "URL and source are required and must be strings" });
   }
 
-  const validSources = ["instagram", "tiktok", "facebook", "twitter"];
+  const validSources = ["instagram", "facebook", "twitter"];
   if (!validSources.includes(source.toLowerCase())) {
     return res
       .status(400)
