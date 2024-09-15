@@ -6,10 +6,10 @@ import jwt from "jsonwebtoken";
 import getFbVideoInfo from "fb-downloader-scrapper";
 import instagramGetUrl from "instagram-url-direct";
 import s from "videos-downloader";
-import pkg from 'nayan-media-downloader';
+// import pkg from 'nayan-media-downloader';
 import dotenv from "dotenv";
 import { db, auth } from "../firebase.js";
-const { tikdown } = pkg;
+// const { tikdown } = pkg;
 dotenv.config();
 
 const app = express();
@@ -249,15 +249,15 @@ async function getVideoData(url, source) {
         videoUrl: igResult.url_list[0],
         thumbnail_url: null,
       };
-      case "tiktok":
-        const tiktokData = await tikdown(url);
-        if (!tiktokData?.data?.video) {
-          throw new Error("No TikTok video URL found");
-        }
-        return {
-          videoUrl: tiktokData.data.video,
-          thumbnail_url: tiktokData.data.author?.avatar
-        };
+      // case "tiktok":
+      //   const tiktokData = await tikdown(url);
+      //   if (!tiktokData?.data?.video) {
+      //     throw new Error("No TikTok video URL found");
+      //   }
+      //   return {
+      //     videoUrl: tiktokData.data.video,
+      //     thumbnail_url: tiktokData.data.author?.avatar
+      //   };
     case "facebook":
       const fbResult = await getFbVideoInfo(url);
       if (!fbResult) {
