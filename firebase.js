@@ -3,10 +3,6 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Debugging logs (optional)
-console.log("PROJECT_ID:", process.env.PROJECT_ID);
-console.log("CLIENT_EMAIL:", process.env.CLIENT_EMAIL);
-console.log("PRIVATE_KEY:", process.env.PRIVATE_KEY ? "Loaded" : "Not loaded");
 
 // Initialize Firebase Admin SDK
 admin.initializeApp({

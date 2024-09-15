@@ -5,32 +5,26 @@ import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import getFbVideoInfo from "fb-downloader-scrapper";
 import instagramGetUrl from "instagram-url-direct";
-import axios from 'axios';
 import s from 'videos-downloader';
-import media from "nayan-media-downloader"
-// Load environment variables
+import media from "nayan-media-downloader";
 import dotenv from 'dotenv';
-dotenv.config();
-
-// Import Firebase services
 import { db, auth } from '../firebase.js';
+
+dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Security middleware
+// Middleware
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
+app.use(rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100
+}));
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-});
-app.use(limiter);
-
-// JWT secret keys
+// Constants
 const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET || 'your_access_token_secret';
 const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET || 'your_refresh_token_secret';
 
@@ -48,26 +42,22 @@ const verifyToken = (req, res, next) => {
   });
 };
 
-// Health check endpoint
+// Routes
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'Server is running' });
 });
-// Signup endpoint
+
 app.post('/api/signup', async (req, res) => {
   const { email, password, name, mobile } = req.body;
 
-  // Input validation
   if (!email || !password || !name) {
     return res.status(400).json({ message: 'Email, password, and name are required fields' });
   }
 
-  // Email format validation
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ message: 'Invalid email format' });
   }
 
-  // Password strength validation (example: at least 8 characters)
   if (password.length < 8) {
     return res.status(400).json({ message: 'Password must be at least 8 characters long' });
   }
@@ -81,7 +71,7 @@ app.post('/api/signup', async (req, res) => {
       customClaims: { referenceId },
     };
 
-    if (mobile) updateObject.mobile = mobile;
+    if (mobile) updateObject.phoneNumber = mobile;
 
     await auth.updateUser(userRecord.uid, updateObject);
 
@@ -91,9 +81,8 @@ app.post('/api/signup', async (req, res) => {
       displayName: name,
       emailVerified: userRecord.emailVerified,
       referenceId,
+      ...(mobile && { phoneNumber: mobile })
     };
-
-    if (mobile) userData.phoneNumber = mobile;
 
     const accessToken = generateAccessToken(userData);
     const refreshToken = jwt.sign(userData, REFRESH_TOKEN_SECRET);
@@ -110,7 +99,6 @@ app.post('/api/signup', async (req, res) => {
   }
 });
 
-// Login endpoint
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
 
@@ -120,8 +108,7 @@ app.post('/api/login', async (req, res) => {
 
   try {
     const userRecord = await auth.getUserByEmail(email);
-
-    // Password verification logic should be implemented here
+    // Note: Implement proper password verification here
 
     const userData = {
       uid: userRecord.uid,
@@ -150,11 +137,11 @@ app.post('/api/login', async (req, res) => {
     res.status(400).json({ message: 'Login failed', error: errorMessage });
   }
 });
+
 app.post("/api/update-download", verifyToken, async (req, res) => {
   const { url, video_url, source, date, status, thumbnail, fileName } = req.body;
   const userId = req.user.uid;
 
-  // Input validation
   if (!url || !source || !status) {
     return res.status(400).json({ error: "URL, source, and status are required" });
   }
@@ -167,10 +154,9 @@ app.post("/api/update-download", verifyToken, async (req, res) => {
       video_url,
       status,
       timestamp: date ? new Date(date) : new Date(),
+      ...(thumbnail && { thumbnail }),
+      ...(fileName && { fileName })
     };
-
-    if (thumbnail) downloadRecord.thumbnail = thumbnail;
-    if (fileName) downloadRecord.fileName = fileName;
 
     const docRef = await db.collection('downloadHistory').add(downloadRecord);
 
@@ -203,12 +189,9 @@ app.post('/api/download', verifyToken, async (req, res) => {
   }
 });
 
+// Helper functions
 async function getVideoData(url, source) {
   switch (source) {
-    // case "youtube":
-    //   const youtubeData = await media?.ytdown(url);
-    //   console.log(JSON.stringify(youtubeData, null, 2));
-    //   return youtubeData;
     case "twitter":
       const twitterData = s.twitter(url);
       if (!twitterData?.media_extended[0]?.url) {
@@ -229,20 +212,20 @@ async function getVideoData(url, source) {
       };
     case "tiktok":
       const tiktokData = await media?.tikdown(url);
-      if (!tiktokData.data.video) {
-        throw new Error("No Tiktok video URL found");
+      if (!tiktokData?.data?.video) {
+        throw new Error("No TikTok video URL found");
       }
       return {
-        videoUrl: tiktokData?.data?.video,
-        thumbnail_url: tiktokData?.data?.author?.avatar
+        videoUrl: tiktokData.data.video,
+        thumbnail_url: tiktokData.data.author?.avatar
       };
     case "facebook":
       const fbResult = await getFbVideoInfo(url);
       if (!fbResult) {
-        throw new Error("No Tiktok video URL found");
+        throw new Error("No Facebook video info found");
       }
       return {
-        videoUrl: fbResult.sd || fbResult.hd || `https://www.facebook.com/reel/${url.split('/reel/')[1].split('/')[0]}`,
+        videoUrl: fbResult.sd || fbResult.hd || `https://www.facebook.com/reel/${url.split('/reel/')[1]?.split('/')[0]}`,
         thumbnail_url: fbResult.thumbnail
       };
     default:
@@ -250,11 +233,6 @@ async function getVideoData(url, source) {
   }
 }
 
-app.listen(port, () => {
-  console.log(`Secure server running on port ${port}`);
-});
-
-// Helper functions
 function generateUniqueReferenceId() {
   return 'REF-' + Math.random().toString(36).substr(2, 9).toUpperCase();
 }
@@ -262,3 +240,7 @@ function generateUniqueReferenceId() {
 function generateAccessToken(user) {
   return jwt.sign(user, ACCESS_TOKEN_SECRET, { expiresIn: '26h' });
 }
+
+app.listen(port, () => {
+  console.log(`Secure server running on port ${port}`);
+});
