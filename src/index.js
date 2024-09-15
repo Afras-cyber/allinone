@@ -10,6 +10,7 @@ import s from "videos-downloader";
 import dotenv from "dotenv";
 import { db, auth } from "../firebase.js";
 // const { tikdown } = pkg;
+import tik from 'rahad-media-downloader'
 dotenv.config();
 
 const app = express();
@@ -249,15 +250,18 @@ async function getVideoData(url, source) {
         videoUrl: igResult.url_list[0],
         thumbnail_url: null,
       };
-      // case "tiktok":
-      //   const tiktokData = await tikdown(url);
-      //   if (!tiktokData?.data?.video) {
-      //     throw new Error("No TikTok video URL found");
-      //   }
-      //   return {
-      //     videoUrl: tiktokData.data.video,
-      //     thumbnail_url: tiktokData.data.author?.avatar
-      //   };
+    case "tiktok":
+      // const tiktokData = await tikdown(url);
+      const tiktokData = await tik.rahadtikdl(url);
+        if (!tiktokData?.data?.noWatermarkMp4) {
+        throw new Error("No TikTok video URL found");
+        }
+      return {
+        videoUrl: tiktokData?.data?.noWatermarkMp4,
+        thumbnail_url: tiktokData?.data?.avatar
+      };
+      break;
+
     case "facebook":
       const fbResult = await getFbVideoInfo(url);
       if (!fbResult) {
@@ -267,8 +271,7 @@ async function getVideoData(url, source) {
         videoUrl:
           fbResult.sd ||
           fbResult.hd ||
-          `https://www.facebook.com/reel/${
-            url.split("/reel/")[1]?.split("/")[0]
+          `https://www.facebook.com/reel/${url.split("/reel/")[1]?.split("/")[0]
           }`,
         thumbnail_url: fbResult.thumbnail,
       };

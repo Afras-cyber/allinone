@@ -23,6 +23,7 @@
     "helmet": "^7.1.0",
     "instagram-url-direct": "^1.0.16",
     "nayan-media-downloader": "^2.5.4",
+    "rahad-media-downloader": "^2.1.14",
     "videos-downloader": "^1.0.4"
   }
 }
