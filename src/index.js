@@ -1,19 +1,19 @@
-const express = require('express');
-const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
-const cors = require('cors');
-const jwt = require('jsonwebtoken');
-const getFbVideoInfo = require("fb-downloader-scrapper");
-const instagramGetUrl = require("instagram-url-direct");
-// const TikTokScraper = require("tiktok-scraper-without-watermark");
-// const { getVideoMeta } = require('tiktok-scraper-ts');
-const axios = require('axios');
-
-
-require('dotenv').config();
+import express from 'express';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import cors from 'cors';
+import jwt from 'jsonwebtoken';
+import getFbVideoInfo from "fb-downloader-scrapper";
+import instagramGetUrl from "instagram-url-direct";
+import axios from 'axios';
+import s from 'videos-downloader';
+import media from "nayan-media-downloader"
+// Load environment variables
+import dotenv from 'dotenv';
+dotenv.config();
 
 // Import Firebase services
-const { db, auth } = require('../firebase');
+import { db, auth } from '../firebase.js';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -26,7 +26,7 @@ app.use(express.json());
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  max: 100, // limit each IP to 100 requests per windowMs
 });
 app.use(limiter);
 
@@ -52,7 +52,7 @@ const verifyToken = (req, res, next) => {
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'Server is running' });
 });
-
+// Signup endpoint
 app.post('/api/signup', async (req, res) => {
   const { email, password, name, mobile } = req.body;
 
@@ -73,41 +73,28 @@ app.post('/api/signup', async (req, res) => {
   }
 
   try {
-    // Generate a unique reference ID
     const referenceId = generateUniqueReferenceId();
-
-    // Create user with email and password
     const userRecord = await auth.createUser({ email, password });
 
-    // Prepare update object
     const updateObject = {
       displayName: name,
-      customClaims: { referenceId }
+      customClaims: { referenceId },
     };
 
-    // Add mobile to update object if provided, without validation
-    if (mobile) {
-      updateObject.mobile = mobile;
-    }
+    if (mobile) updateObject.mobile = mobile;
 
-    // Update user profile
     await auth.updateUser(userRecord.uid, updateObject);
 
-    // Prepare user data
     const userData = {
       uid: userRecord.uid,
       email: userRecord.email,
       displayName: name,
       emailVerified: userRecord.emailVerified,
-      referenceId
+      referenceId,
     };
 
-    // Add mobile to userData if provided
-    if (mobile) {
-      userData.phoneNumber = mobile;
-    }
+    if (mobile) userData.phoneNumber = mobile;
 
-    // Generate JWT tokens
     const accessToken = generateAccessToken(userData);
     const refreshToken = jwt.sign(userData, REFRESH_TOKEN_SECRET);
 
@@ -115,7 +102,7 @@ app.post('/api/signup', async (req, res) => {
       message: 'User created successfully',
       user: userData,
       accessToken,
-      refreshToken
+      refreshToken,
     });
   } catch (error) {
     console.error('Signup error:', error);
@@ -123,22 +110,19 @@ app.post('/api/signup', async (req, res) => {
   }
 });
 
+// Login endpoint
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
 
-  // Input validation
   if (!email || !password) {
     return res.status(400).json({ message: 'Email and password are required' });
   }
 
   try {
-    // Get user by email
     const userRecord = await auth.getUserByEmail(email);
 
-    // Verify password (this step needs to be implemented separately as Admin SDK doesn't have a built-in method for this)
-    // For demonstration, we'll assume the password is correct. In a real application, you'd need to implement secure password verification.
+    // Password verification logic should be implemented here
 
-    // Prepare user data without sensitive information
     const userData = {
       uid: userRecord.uid,
       email: userRecord.email,
@@ -146,10 +130,9 @@ app.post('/api/login', async (req, res) => {
       photoURL: userRecord.photoURL,
       emailVerified: userRecord.emailVerified,
       phoneNumber: userRecord.phoneNumber,
-      referenceId: userRecord.customClaims?.referenceId
+      referenceId: userRecord.customClaims?.referenceId,
     };
 
-    // Generate JWT tokens
     const accessToken = generateAccessToken(userData);
     const refreshToken = jwt.sign(userData, REFRESH_TOKEN_SECRET);
 
@@ -157,172 +140,125 @@ app.post('/api/login', async (req, res) => {
       message: 'Login successful',
       user: userData,
       accessToken,
-      refreshToken
+      refreshToken,
     });
   } catch (error) {
     console.error('Login error:', error);
-
-    // Standardized error messages
-    let errorMessage = 'An error occurred during login';
-    if (error.code === 'auth/user-not-found') {
-      errorMessage = 'Invalid email or password';
-    } else if (error.code === 'auth/too-many-requests') {
-      errorMessage = 'Too many failed login attempts. Please try again later';
-    }
-
+    const errorMessage = error.code === 'auth/user-not-found'
+      ? 'Invalid email or password'
+      : 'An error occurred during login';
     res.status(400).json({ message: 'Login failed', error: errorMessage });
   }
 });
+app.post("/api/update-download", verifyToken, async (req, res) => {
+  const { url, video_url, source, date, status, thumbnail, fileName } = req.body;
+  const userId = req.user.uid;
 
-// Protected route example with token verification
-app.get('/api/protected', verifyToken, (req, res) => {
-  res.status(200).json({ message: 'Access granted to protected resource', user: req.user });
+  // Input validation
+  if (!url || !source || !status) {
+    return res.status(400).json({ error: "URL, source, and status are required" });
+  }
+
+  try {
+    const downloadRecord = {
+      userId,
+      url,
+      source,
+      video_url,
+      status,
+      timestamp: date ? new Date(date) : new Date(),
+    };
+
+    if (thumbnail) downloadRecord.thumbnail = thumbnail;
+    if (fileName) downloadRecord.fileName = fileName;
+
+    const docRef = await db.collection('downloadHistory').add(downloadRecord);
+
+    res.status(201).json({ message: "Download history updated successfully", id: docRef.id });
+  } catch (error) {
+    console.error("Error updating download history:", error);
+    res.status(500).json({ error: "Failed to update download history", details: error.message });
+  }
 });
+
 app.post('/api/download', verifyToken, async (req, res) => {
   const { url, source } = req.body;
   const userId = req.user.uid;
 
-  // Input validation
-  if (!url || !source) {
-    return res.status(400).json({ error: "URL and source are required" });
+  if (!url || !source || typeof url !== 'string' || typeof source !== 'string') {
+    return res.status(400).json({ error: "URL and source are required and must be strings" });
   }
 
-  if (typeof url !== 'string' || typeof source !== 'string') {
-    return res.status(400).json({ error: "URL and source must be strings" });
-  }
-
-  const validSources = ["instagram", "tiktok", "facebook"];
+  const validSources = ["instagram", "tiktok", "facebook", "twitter"];
   if (!validSources.includes(source.toLowerCase())) {
-    return res.status(400).json({ error: "Invalid source. Supported sources are Instagram, TikTok, and Facebook" });
+    return res.status(400).json({ error: `Invalid source. Supported sources are ${validSources.join(', ')}` });
   }
 
   try {
-    let videoUrl;
-
-    switch (source.toLowerCase()) {
-      case "instagram":
-        const igResult = await instagramGetUrl(url);
-        if (!igResult.url_list || igResult.url_list.length === 0) {
-          throw new Error("No Instagram video URL found");
-        }
-        videoUrl = igResult.url_list[0];
-        break;
-        case "tiktok":
-          try {
-            // First, get the oEmbed data
-            const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`;
-            const oembedResponse = await axios.get(oembedUrl);
-            const oembedData = oembedResponse.data;
-        
-            // Extract the video ID from the oEmbed data
-            const videoId = oembedData.html.match(/data-video-id="([^"]+)"/)[1];
-        
-            // Construct an embed URL
-            videoUrl = `https://www.tiktok.com/embed/${videoId}`;
-        
-          } catch (error) {
-            console.error("TikTok scraping error:", error);
-            throw new Error("Failed to fetch TikTok video information");
-          }
-          break;
-      case "facebook":
-        const fbResult = await getFbVideoInfo(url);
-        if (fbResult.sd) {
-          videoUrl = fbResult.sd;
-        } else if (fbResult.hd) {
-          videoUrl = fbResult.hd;
-        } else if (url.includes('/reel/')) {
-          // Handle Facebook Reels
-          const reelId = url.split('/reel/')[1].split('/')[0];
-          videoUrl = `https://www.facebook.com/reel/${reelId}`;
-        } else {
-          throw new Error("No Facebook video URL found");
-        }
-        break;
-    }
-
-    // Save download history in Firestore
-    await db.collection('downloadHistory').add({
-      userId,
-      url,
-      source,
-      videoUrl,
-      timestamp: new Date(),
-    });
-
-    res.status(200).json({ videoUrl });
+    const data = await getVideoData(url, source.toLowerCase());
+    res.status(200).json(data);
   } catch (error) {
     console.error("Error:", error);
-    let errorMessage = "Failed to download video";
-
-    if (error.message.includes("No") && error.message.includes("video URL found")) {
-      errorMessage = error.message;
-    } else if (error.message.includes("Network Error")) {
-      errorMessage = "Network error occurred while fetching the video";
-    }
-
-    res.status(500).json({ error: errorMessage, details: error.message });
+    res.status(500).json({ error: "Failed to download video", details: error.message });
   }
 });
-// Download history endpoint
-app.get('/api/download-history', verifyToken, async (req, res) => {
-  try {
-    const userId = req.user.uid;
 
-    // Fetch download history from Firestore
-    const historySnapshot = await db.collection('downloadHistory')
-      .where('userId', '==', userId)
-      .orderBy('timestamp', 'desc')
-      .get();
-
-    const downloadHistory = historySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      timestamp: doc.data().timestamp.toDate()
-    }));
-
-    res.status(200).json({ downloadHistory });
-  } catch (error) {
-    console.error("Error fetching download history:", error);
-    if (error.code === 'failed-precondition') {
-      res.status(500).json({
-        error: "Failed to fetch download history",
-        details: "Missing index. Please create the required index in Firebase console.",
-        indexUrl: error.message.match(/https:\/\/console\.firebase\.google\.com[^\s]+/)[0]
-      });
-    } else {
-      res.status(500).json({ error: "Failed to fetch download history", details: error.message });
-    }
+async function getVideoData(url, source) {
+  switch (source) {
+    // case "youtube":
+    //   const youtubeData = await media?.ytdown(url);
+    //   console.log(JSON.stringify(youtubeData, null, 2));
+    //   return youtubeData;
+    case "twitter":
+      const twitterData = s.twitter(url);
+      if (!twitterData?.media_extended[0]?.url) {
+        throw new Error("No Twitter video URL found");
+      }
+      return {
+        videoUrl: twitterData.media_extended[0].url,
+        thumbnail_url: twitterData.media_extended[0].thumbnail_url,
+      };
+    case "instagram":
+      const igResult = await instagramGetUrl(url);
+      if (!igResult.url_list || igResult.url_list.length === 0) {
+        throw new Error("No Instagram video URL found");
+      }
+      return {
+        videoUrl: igResult.url_list[0],
+        thumbnail_url: null
+      };
+    case "tiktok":
+      const tiktokData = await media?.tikdown(url);
+      if (!tiktokData.data.video) {
+        throw new Error("No Tiktok video URL found");
+      }
+      return {
+        videoUrl: tiktokData?.data?.video,
+        thumbnail_url: tiktokData?.data?.author?.avatar
+      };
+    case "facebook":
+      const fbResult = await getFbVideoInfo(url);
+      if (!fbResult) {
+        throw new Error("No Tiktok video URL found");
+      }
+      return {
+        videoUrl: fbResult.sd || fbResult.hd || `https://www.facebook.com/reel/${url.split('/reel/')[1].split('/')[0]}`,
+        thumbnail_url: fbResult.thumbnail
+      };
+    default:
+      throw new Error("Unsupported source");
   }
-});
-// Refresh token endpoint
-app.post('/api/token', (req, res) => {
-  const refreshToken = req.body.token;
-  if (!refreshToken) return res.status(401).json({ message: 'Refresh token is required' });
-
-  jwt.verify(refreshToken, REFRESH_TOKEN_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ message: 'Invalid refresh token' });
-    const accessToken = generateAccessToken({ uid: user.uid });
-    res.json({ accessToken });
-  });
-});
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ message: 'Internal Server Error' });
-});
+}
 
 app.listen(port, () => {
   console.log(`Secure server running on port ${port}`);
 });
 
-// Helper function to generate a unique reference ID
+// Helper functions
 function generateUniqueReferenceId() {
   return 'REF-' + Math.random().toString(36).substr(2, 9).toUpperCase();
 }
 
-// Helper function to generate access token
 function generateAccessToken(user) {
   return jwt.sign(user, ACCESS_TOKEN_SECRET, { expiresIn: '26h' });
 }

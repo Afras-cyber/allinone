@@ -1,25 +1,30 @@
-const admin = require("firebase-admin");
-// const serviceAccount = require('./serviceAccountKey.json');
-require('dotenv').config();
+import admin from 'firebase-admin';
+import dotenv from 'dotenv';
 
+dotenv.config();
+
+// Debugging logs (optional)
+console.log("PROJECT_ID:", process.env.PROJECT_ID);
+console.log("CLIENT_EMAIL:", process.env.CLIENT_EMAIL);
+console.log("PRIVATE_KEY:", process.env.PRIVATE_KEY ? "Loaded" : "Not loaded");
+
+// Initialize Firebase Admin SDK
 admin.initializeApp({
   credential: admin.credential.cert({
-    type: process.env?.type || "",
-    project_id: process.env?.project_id || "",
-    private_key_id: process.env?.private_key_id || "",
-    private_key: process.env?.private_key?.replace(/\\n/g, '\n') || "",
-    client_email: process.env?.client_email || "",
-    client_id: process.env?.client_id || "",
-    auth_uri: process.env?.auth_uri || "",
-    token_uri: process.env?.token_uri || "",
-    auth_provider_x509_cert_url: process.env?.auth_provider_x509_cert_url || "",
-    client_x509_cert_url: process.env?.client_x509_cert_url || "",
-    universe_domain: process.env?.universe_domain || "",
+    type: process.env.TYPE || "",
+    project_id: process.env.PROJECT_ID || "",
+    private_key_id: process.env.PRIVATE_KEY_ID || "",
+    private_key: process.env.PRIVATE_KEY?.replace(/\\n/g, '\n') || "",
+    client_email: process.env.CLIENT_EMAIL || "",
+    client_id: process.env.CLIENT_ID || "",
+    auth_uri: process.env.AUTH_URI || "",
+    token_uri: process.env.TOKEN_URI || "",
+    auth_provider_x509_cert_url: process.env.AUTH_PROVIDER_X509_CERT_URL || "",
+    client_x509_cert_url: process.env.CLIENT_X509_CERT_URL || "",
+    universe_domain: process.env.UNIVERSE_DOMAIN || "",
   }),
   databaseURL: "https://allinonedownload-4b420.firebaseio.com",
 });
 
-const db = admin.firestore();
-const auth = admin.auth();
-
-module.exports = { db, auth };
+export const db = admin.firestore();
+export const auth = admin.auth();
