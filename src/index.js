@@ -252,14 +252,23 @@ async function getVideoData(url, source) {
       };
     case "tiktok":
       // const tiktokData = await tikdown(url);
-      const tiktokData = await tik.rahadtikdl(url);
+      try {
+        const tiktokData = await tik.rahadtikdl(url);
         if (!tiktokData?.data?.noWatermarkMp4) {
-        throw new Error("No TikTok video URL found");
+          throw new Error("No TikTok video URL found");
         }
-      return {
-        videoUrl: tiktokData?.data?.noWatermarkMp4,
-        thumbnail_url: tiktokData?.data?.avatar
-      };
+        return {
+          videoUrl: tiktokData?.data?.noWatermarkMp4,
+          thumbnail_url: tiktokData?.data?.avatar
+        };
+
+      } catch (error) {
+        console.log(error?.message)
+        return {
+          videoUrl: url,
+          thumbnail_url: null
+        }
+      }
       break;
 
     case "facebook":
