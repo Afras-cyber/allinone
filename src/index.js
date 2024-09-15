@@ -250,25 +250,24 @@ async function getVideoData(url, source) {
         videoUrl: igResult.url_list[0],
         thumbnail_url: null,
       };
-    case "tiktok":
-      // const tiktokData = await tikdown(url);
-      try {
-        const tiktokData = await tik.rahadtikdl(url);
-        if (!tiktokData?.data?.noWatermarkMp4) {
-          throw new Error("No TikTok video URL found");
+      case "tiktok":
+        try {
+          const tiktokData = await tik.rahadtikdl(url);
+          if (!tiktokData?.data?.noWatermarkMp4) {
+            throw new Error("No TikTok video URL found");
+          }
+          return {
+            videoUrl: tiktokData.data.noWatermarkMp4,
+            thumbnail_url: tiktokData.data.avatar || null
+          };
+        } catch (error) {
+          console.error("TikTok download error:", error.message);
+          // Attempt to use alternative fields or fallback to original URL
+          return {
+            videoUrl: tiktokData?.data?.watermarkMp4 || tiktokData?.data?.watermarkHd || url,
+            thumbnail_url: tiktokData?.data?.dynamicCover || tiktokData?.data?.cover || null
+          };
         }
-        return {
-          videoUrl: tiktokData?.data?.noWatermarkMp4,
-          thumbnail_url: tiktokData?.data?.avatar
-        };
-
-      } catch (error) {
-        console.log(error?.message)
-        return {
-          videoUrl: url,
-          thumbnail_url: null
-        }
-      }
       break;
 
     case "facebook":
