@@ -192,6 +192,49 @@ app.post("/api/update-download", verifyToken, async (req, res) => {
   }
 });
 
+// Download history endpoint
+app.get('/api/download-history', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.uid;
+
+    // Fetch download history from Firestore
+    const historySnapshot = await db.collection('downloadHistory')
+      .where('userId', '==', userId)
+      .orderBy('timestamp', 'desc')
+      .get();
+
+    const downloadHistory = historySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      timestamp: doc.data().timestamp.toDate()
+    }));
+
+    res.status(200).json({ downloadHistory });
+  } catch (error) {
+    console.error("Error fetching download history:", error);
+    if (error.code === 'failed-precondition') {
+      res.status(500).json({
+        error: "Failed to fetch download history",
+        details: "Missing index. Please create the required index in Firebase console.",
+        indexUrl: error.message.match(/https:\/\/console\.firebase\.google\.com[^\s]+/)[0]
+      });
+    } else {
+      res.status(500).json({ error: "Failed to fetch download history", details: error.message });
+    }
+  }
+});
+// Refresh token endpoint
+app.post('/api/token', (req, res) => {
+  const refreshToken = req.body.token;
+  if (!refreshToken) return res.status(401).json({ message: 'Refresh token is required' });
+
+  jwt.verify(refreshToken, REFRESH_TOKEN_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ message: 'Invalid refresh token' });
+    const accessToken = generateAccessToken({ uid: user.uid });
+    res.json({ accessToken });
+  });
+});
+
 app.post("/api/download", verifyToken, async (req, res) => {
   const { url, source } = req.body;
   const userId = req.user.uid;
