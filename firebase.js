@@ -3,7 +3,6 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-
 // Initialize Firebase Admin SDK
 admin.initializeApp({
   credential: admin.credential.cert({
