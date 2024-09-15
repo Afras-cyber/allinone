@@ -10,7 +10,7 @@ import s from "videos-downloader";
 import dotenv from "dotenv";
 import { db, auth } from "../firebase.js";
 // const { tikdown } = pkg;
-import tik from 'rahad-media-downloader'
+// import tik from 'rahad-media-downloader'
 dotenv.config();
 
 const app = express();
@@ -241,6 +241,7 @@ async function getVideoData(url, source) {
         videoUrl: twitterData.media_extended[0].url,
         thumbnail_url: twitterData.media_extended[0].thumbnail_url,
       };
+      break
     case "instagram":
       const igResult = await instagramGetUrl(url);
       if (!igResult.url_list || igResult.url_list.length === 0) {
@@ -250,25 +251,26 @@ async function getVideoData(url, source) {
         videoUrl: igResult.url_list[0],
         thumbnail_url: null,
       };
-      case "tiktok":
-        try {
-          const tiktokData = await tik.rahadtikdl(url);
-          if (!tiktokData?.data?.noWatermarkMp4) {
-            throw new Error("No TikTok video URL found");
-          }
-          return {
-            videoUrl: tiktokData.data.noWatermarkMp4,
-            thumbnail_url: tiktokData.data.avatar || null
-          };
-        } catch (error) {
-          console.error("TikTok download error:", error.message);
-          // Attempt to use alternative fields or fallback to original URL
-          return {
-            videoUrl: tiktokData?.data?.watermarkMp4 || tiktokData?.data?.watermarkHd || url,
-            thumbnail_url: tiktokData?.data?.dynamicCover || tiktokData?.data?.cover || null
-          };
-        }
-      break;
+      break
+    // case "tiktok":
+    //   try {
+    //     const tiktokData = await tik.rahadtikdl(url);
+    //     if (!tiktokData?.data?.noWatermarkMp4) {
+    //       throw new Error("No TikTok video URL found");
+    //     }
+    //     return {
+    //       videoUrl: tiktokData.data.noWatermarkMp4,
+    //       thumbnail_url: tiktokData.data.avatar || null
+    //     };
+    //   } catch (error) {
+    //     console.error("TikTok download error:", error.message);
+    //     // Attempt to use alternative fields or fallback to original URL
+    //     return {
+    //       videoUrl: tiktokData?.data?.watermarkMp4 || tiktokData?.data?.watermarkHd || url,
+    //       thumbnail_url: tiktokData?.data?.dynamicCover || tiktokData?.data?.cover || null
+    //     };
+    //   }
+    // break;
 
     case "facebook":
       const fbResult = await getFbVideoInfo(url);
@@ -283,6 +285,7 @@ async function getVideoData(url, source) {
           }`,
         thumbnail_url: fbResult.thumbnail,
       };
+      break
     default:
       throw new Error("Unsupported source");
   }
