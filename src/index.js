@@ -239,6 +239,7 @@ app.post("/api/download", verifyToken, async (req, res) => {
   const { url, source } = req.body;
   const userId = req.user.uid;
 
+
   if (
     !url ||
     !source ||
@@ -274,16 +275,21 @@ app.post("/api/download", verifyToken, async (req, res) => {
 
 // Helper functions
 async function getVideoData(url, source) {
+    console.log("_->", url, source);
   switch (source) {
     case "twitter":
-      const twitterData = s.twitter(url);
-      if (!twitterData?.media_extended[0]?.url) {
+      const twitterData =await s.twitter(url);
+      console.log("TWITTER",twitterData?.result?.mediaURLs[0])
+      if (twitterData?.result?.mediaURLs?.length == 0) {
         throw new Error("No Twitter video URL found");
       }
-      return {
-        videoUrl: twitterData.media_extended[0].url,
-        thumbnail_url: twitterData.media_extended[0].thumbnail_url,
-      };
+      if(twitterData?.result?.mediaURLs.length > 0){
+
+        return {
+          videoUrl: twitterData?.result?.mediaURLs[0],
+          thumbnail_url: twitterData?.result?.user_profile_image_url,
+        };
+      }
       break
     case "instagram":
       const igResult = await instagramGetUrl(url);
