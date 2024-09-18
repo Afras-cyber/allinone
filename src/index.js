@@ -82,7 +82,7 @@ app.post("/api/signup", async (req, res) => {
       customClaims: { referenceId },
     };
 
-    if (mobile) updateObject.phoneNumber = mobile;
+    // if (mobile) updateObject.phoneNumber = mobile;
 
     await auth.updateUser(userRecord.uid, updateObject);
 
